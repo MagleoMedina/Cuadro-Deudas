@@ -1,12 +1,12 @@
 {
   "expo": {
-    "name": "my-app",
-    "slug": "my-app",
+    "name": "Cuadro Compromisos Eduardo",
+    "slug": "cuadro-compromisos-eduardo",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "myapp",
-    "userInterfaceStyle": "automatic",
+    "scheme": "cuadrocompromisos",
+    "userInterfaceStyle": "light",
     "ios": {
       "icon": "./assets/expo.icon"
     },
@@ -32,11 +32,25 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
         }
-      ]
+      ],
+      "expo-sqlite",
+      "expo-sharing",
+      "@react-native-community/datetimepicker"
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {
+        "asyncRoutes": {
+          "web": true
+        }
+      },
+      "eas": {
+        "projectId": "0a9c169d-f3b6-4ea3-a0ca-1f039a6c6aa0"
+      }
+    },
+    "owner": "magleo"
   }
 }

@@ -1,0 +1,16 @@
+export const UI = {
+  fondo: '#F3F5F9',
+  tarjeta: '#FFFFFF',
+  texto: '#111827',
+  textoSuave: '#6B7280',
+  borde: '#E5E7EB',
+  primario: '#2563EB',
+  primarioSuave: '#DBEAFE',
+  textoPrimario: '#FFFFFF',
+  peligro: '#DC2626',
+  peligroSuave: '#FEE2E2',
+  exito: '#059669',
+  exitoSuave: '#D1FAE5',
+  overlay: 'rgba(17, 24, 39, 0.45)',
+  sombra: '#0F172A',
+} as const;
