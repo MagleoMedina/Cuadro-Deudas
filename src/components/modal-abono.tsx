@@ -5,6 +5,7 @@ import { UI } from '@/constants/ui';
 import type { Articulo, NuevoPago } from '@/db/repo';
 import { formatearFecha, hoyISO } from '@/lib/dates';
 import { formatearMonto, montoAInput, parseMontoACentos } from '@/lib/money';
+import { borde45, sombraElevada } from '@/lib/shadows';
 
 import { FechaCampo } from './fecha-campo';
 import { Aviso, Boton, Campo, ModalShell } from './ui';
@@ -87,6 +88,7 @@ export function ModalAbono({
         await onEditar(editandoId, seleccionado.id, datos);
       } else {
         await onCrear(seleccionado.id, datos);
+        Alert.alert('Abono guardado', 'El abono se guardó satisfactoriamente.');
       }
       limpiarFormulario();
     } catch (e) {
@@ -272,11 +274,12 @@ const styles = StyleSheet.create({
     flexGrow: 0,
   },
   chip: {
-    borderWidth: 1.5,
     borderRadius: 999,
     paddingHorizontal: 14,
     paddingVertical: 8,
     marginRight: 8,
+    backgroundColor: UI.fondo,
+    ...borde45,
   },
   chipTexto: {
     fontSize: 13,
@@ -287,13 +290,15 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   resumen: {
-    backgroundColor: UI.tarjeta,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: UI.borde,
+    backgroundColor: UI.fondo,
+    borderRadius: 14,
     padding: 12,
     gap: 6,
     marginBottom: 16,
+    ...borde45,
+    ...sombraElevada,
+    shadowOpacity: 0.35,
+    elevation: 3,
   },
   resumenFila: {
     flexDirection: 'row',
@@ -317,9 +322,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: UI.tarjeta,
-    borderWidth: 1,
-    borderColor: UI.borde,
+    backgroundColor: UI.fondo,
+    ...borde45,
     borderRadius: 12,
     padding: 10,
     marginBottom: 8,

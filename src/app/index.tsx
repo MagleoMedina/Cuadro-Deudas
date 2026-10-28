@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -21,8 +21,8 @@ import type { Articulo, NuevoArticulo, NuevoPago } from '@/db/repo';
 import { useCompromisos } from '@/hooks/use-compromisos';
 import { exportarRespaldo, importarRespaldo } from '@/lib/backup';
 import { colorPorIndice } from '@/lib/colors';
-import { formatearMonto } from '@/lib/money';
 import { exportarPdf } from '@/lib/pdf';
+import { borde45, bordeHundido, sombraElevada } from '@/lib/shadows';
 
 export default function HomeScreen() {
   const {
@@ -49,17 +49,6 @@ export default function HomeScreen() {
   const [modalAbono, setModalAbono] = useState(false);
   const [articuloAbonar, setArticuloAbonar] = useState<Articulo | null>(null);
   const [ocupado, setOcupado] = useState(false);
-
-  const totales = useMemo(() => {
-    return articulos.reduce(
-      (acumulado, articulo) => ({
-        inicial: acumulado.inicial + articulo.montoInicialCents,
-        pagado: acumulado.pagado + articulo.pagadoCents,
-        saldo: acumulado.saldo + articulo.saldoCents,
-      }),
-      { inicial: 0, pagado: 0, saldo: 0 }
-    );
-  }, [articulos]);
 
   const abrirNuevo = () => {
     setArticuloEditando(null);
@@ -184,25 +173,10 @@ export default function HomeScreen() {
         <View style={styles.cabecera}>
           <View style={styles.cabeceraTexto}>
             <Text style={styles.titulo}>Cuadro Compromisos Eduardo</Text>
+            <View style={styles.regla} />
             <Text style={styles.subtitulo}>Control local de deudas y abonos · montos en $</Text>
           </View>
           {ocupado ? <ActivityIndicator color={UI.primario} /> : null}
-        </View>
-
-        <View style={styles.herramientas}>
-          <Boton compacto titulo="Exportar PDF" onPress={exportar} disabled={ocupado} />
-          <Boton compacto variante="secundario" titulo="Respaldar" onPress={exportarJson} disabled={ocupado} />
-          <Boton compacto variante="secundario" titulo="Importar" onPress={importarJson} disabled={ocupado} />
-          <Pressable
-            accessibilityRole="checkbox"
-            accessibilityState={{ checked: incluirArchivados }}
-            onPress={() => setIncluirArchivados(!incluirArchivados)}
-            style={[styles.interruptor, incluirArchivados && styles.interruptorActivo]}>
-            <View style={[styles.casilla, incluirArchivados && styles.casillaActiva]}>
-              {incluirArchivados ? <Text style={styles.tilde}>✓</Text> : null}
-            </View>
-            <Text style={styles.interruptorTexto}>Ver archivados</Text>
-          </Pressable>
         </View>
 
         {error ? <Aviso texto={error} /> : null}
@@ -217,49 +191,47 @@ export default function HomeScreen() {
               <Text style={styles.cargandoTexto}>Cargando compromisos…</Text>
             </View>
           ) : (
-            <>
-              <CompromisosTable
-                articulos={articulos}
-                onAbonar={abrirAbonar}
-                onEditar={abrirEditar}
-                onArchivar={confirmarArchivar}
-                onEliminar={confirmarEliminar}
-              />
-
-              {articulos.length > 0 ? (
-                <View style={styles.totales}>
-                  <View style={styles.total}>
-                    <Text style={styles.totalEtiqueta}>Total deuda</Text>
-                    <Text style={styles.totalValor}>{formatearMonto(totales.inicial)}</Text>
-                  </View>
-                  <View style={styles.total}>
-                    <Text style={styles.totalEtiqueta}>Total abonado</Text>
-                    <Text style={styles.totalValor}>{formatearMonto(totales.pagado)}</Text>
-                  </View>
-                  <View style={styles.total}>
-                    <Text style={styles.totalEtiqueta}>Saldo global</Text>
-                    <Text style={[styles.totalValor, styles.totalSaldo]}>
-                      {formatearMonto(totales.saldo)}
-                    </Text>
-                  </View>
-                </View>
-              ) : null}
-            </>
+            <CompromisosTable
+              articulos={articulos}
+              onAbonar={abrirAbonar}
+              onEditarAbonos={abrirAbonar}
+              onEditar={abrirEditar}
+              onArchivar={confirmarArchivar}
+              onEliminar={confirmarEliminar}
+            />
           )}
         </ScrollView>
 
-        <View style={styles.barra}>
-          <Boton
-            titulo="Registrar artículo"
-            onPress={abrirNuevo}
-            style={styles.barraBoton}
-          />
-          <Boton
-            titulo="Abonar"
-            variante="secundario"
-            onPress={() => abrirAbonar(null)}
-            style={styles.barraBoton}
-          />
+        <View style={styles.piePagina}>
+          <View style={styles.herramientas}>
+            <Boton compacto titulo="Exportar PDF" onPress={exportar} disabled={ocupado} />
+            <Boton compacto variante="secundario" titulo="Respaldar" onPress={exportarJson} disabled={ocupado} />
+            <Boton compacto variante="secundario" titulo="Importar" onPress={importarJson} disabled={ocupado} />
+            <Pressable
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: incluirArchivados }}
+              onPress={() => setIncluirArchivados(!incluirArchivados)}
+              style={[styles.interruptor, incluirArchivados && styles.interruptorActivo]}>
+              <View style={[styles.casilla, incluirArchivados && styles.casillaActiva]}>
+                {incluirArchivados ? <Text style={styles.tilde}>✓</Text> : null}
+              </View>
+              <Text style={styles.interruptorTexto}>Ver archivados</Text>
+            </Pressable>
+          </View>
+
+          <View style={styles.barra}>
+            <Boton
+              titulo="Registrar artículo"
+              onPress={abrirNuevo}
+              style={styles.barraBoton}
+            />
+            <Boton
+              titulo="Abonar"
+              variante="secundario"
+              onPress={() => abrirAbonar(null)}
+              style={styles.barraBoton}
+            />
+          </View>
         </View>
       </View>
 
@@ -322,15 +294,25 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   titulo: {
-    fontSize: 24,
-    fontWeight: '900',
+    fontFamily: UI.serif,
+    fontSize: 30,
+    fontWeight: '700',
     color: UI.texto,
-    letterSpacing: -0.4,
+    letterSpacing: -0.6,
+  },
+  regla: {
+    width: 64,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: UI.primario,
+    marginTop: 8,
+    marginBottom: 2,
+    marginLeft: -4,
   },
   subtitulo: {
     fontSize: 12,
     color: UI.textoSuave,
-    marginTop: 2,
+    marginTop: 4,
     fontWeight: '600',
   },
   herramientas: {
@@ -338,7 +320,6 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 12,
   },
   interruptor: {
     flexDirection: 'row',
@@ -346,14 +327,18 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: UI.borde,
-    backgroundColor: UI.tarjeta,
+    borderRadius: 12,
+    backgroundColor: UI.fondo,
+    ...borde45,
+    ...sombraElevada,
+    shadowOpacity: 0.3,
+    elevation: 2,
   },
   interruptorActivo: {
-    borderColor: UI.primario,
     backgroundColor: UI.primarioSuave,
+    ...bordeHundido,
+    shadowOpacity: 0.15,
+    elevation: 1,
   },
   casilla: {
     width: 18,
@@ -396,40 +381,14 @@ const styles = StyleSheet.create({
     color: UI.textoSuave,
     fontWeight: '600',
   },
-  totales: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+  piePagina: {
     gap: 10,
-    backgroundColor: UI.tarjeta,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: UI.borde,
-    padding: 14,
-  },
-  total: {
-    flexGrow: 1,
-    minWidth: 140,
-  },
-  totalEtiqueta: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: UI.textoSuave,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  totalValor: {
-    fontSize: 18,
-    fontWeight: '900',
-    color: UI.texto,
-    marginTop: 2,
-  },
-  totalSaldo: {
-    color: UI.primario,
+    paddingTop: 10,
   },
   barra: {
     flexDirection: 'row',
     gap: 10,
-    paddingVertical: 12,
+    paddingVertical: 8,
   },
   barraBoton: {
     flex: 1,

@@ -6,6 +6,7 @@ import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { UI } from '@/constants/ui';
 import { aISO, desdeISO, formatearFecha } from '@/lib/dates';
+import { borde45, bordeHundido, sombraElevada } from '@/lib/shadows';
 
 interface FechaCampoProps {
   etiqueta: string;
@@ -70,9 +71,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: UI.borde,
+    backgroundColor: UI.fondo,
+    ...bordeHundido,
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 12,
@@ -89,10 +89,10 @@ const styles = StyleSheet.create({
   },
   picker: {
     marginTop: 8,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: UI.borde,
+    backgroundColor: UI.fondo,
+    borderRadius: 14,
+    ...borde45,
+    ...sombraElevada,
     overflow: 'hidden',
   },
   listo: {

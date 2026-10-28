@@ -14,6 +14,13 @@ import {
 } from 'react-native';
 
 import { UI } from '@/constants/ui';
+import {
+  borde45,
+  bordeHundido,
+  sombraAcento,
+  sombraElevada,
+  sombraFuerte,
+} from '@/lib/shadows';
 
 type VarianteBoton = 'primario' | 'secundario' | 'peligro' | 'fantasma';
 
@@ -35,11 +42,18 @@ export function Boton({
   style,
 }: BotonProps) {
   const paleta = {
-    primario: { fondo: UI.primario, texto: UI.textoPrimario, borde: UI.primario },
-    secundario: { fondo: UI.primarioSuave, texto: UI.primario, borde: UI.primarioSuave },
-    peligro: { fondo: UI.peligroSuave, texto: UI.peligro, borde: UI.peligroSuave },
-    fantasma: { fondo: 'transparent', texto: UI.textoSuave, borde: UI.borde },
+    primario: { fondo: UI.primario, texto: UI.textoPrimario },
+    secundario: { fondo: UI.fondo, texto: UI.texto },
+    peligro: { fondo: UI.fondo, texto: UI.peligroTexto },
+    fantasma: { fondo: 'transparent', texto: UI.textoSuave },
   }[variante];
+
+  const elevado =
+    variante === 'primario'
+      ? { ...sombraAcento(UI.primario), ...borde45 }
+      : variante === 'fantasma'
+        ? {}
+        : { ...sombraElevada, ...borde45 };
 
   return (
     <Pressable
@@ -50,11 +64,12 @@ export function Boton({
       style={({ pressed }) => [
         styles.boton,
         compacto && styles.botonCompacto,
+        elevado,
         {
           backgroundColor: paleta.fondo,
-          borderColor: paleta.borde,
-          opacity: disabled ? 0.45 : pressed ? 0.75 : 1,
+          opacity: disabled ? 0.45 : 1,
         },
+        pressed && !disabled ? sombraHundidaBoton(variante) : null,
         style,
       ]}>
       <Text
@@ -67,6 +82,24 @@ export function Boton({
       </Text>
     </Pressable>
   );
+}
+
+function sombraHundidaBoton(variante: VarianteBoton) {
+  if (variante === 'fantasma') {
+    return { opacity: 0.6 };
+  }
+  if (variante === 'primario') {
+    return {
+      shadowOpacity: 0.15,
+      elevation: 1,
+      ...bordeHundido,
+    };
+  }
+  return {
+    shadowOpacity: 0.2,
+    elevation: 1,
+    ...bordeHundido,
+  };
 }
 
 interface CampoProps extends TextInputProps {
@@ -126,8 +159,10 @@ export function Selector<T extends string>({
 export function Aviso({ texto, tono = 'error' }: { texto: string; tono?: 'error' | 'info' }) {
   const esError = tono === 'error';
   return (
-    <View style={[styles.aviso, { backgroundColor: esError ? UI.peligroSuave : UI.primarioSuave }]}>
-      <Text style={[styles.avisoTexto, { color: esError ? UI.peligro : UI.primario }]}>{texto}</Text>
+    <View style={[styles.aviso, esError ? styles.avisoError : styles.avisoInfo]}>
+      <Text style={[styles.avisoTexto, { color: esError ? UI.peligroTexto : UI.primario }]}>
+        {texto}
+      </Text>
     </View>
   );
 }
@@ -169,8 +204,7 @@ export function ModalShell({ visible, titulo, onClose, children, pie }: ModalShe
 
 const styles = StyleSheet.create({
   boton: {
-    borderRadius: 12,
-    borderWidth: 1,
+    borderRadius: 14,
     paddingHorizontal: 16,
     paddingVertical: 12,
     alignItems: 'center',
@@ -179,7 +213,7 @@ const styles = StyleSheet.create({
   botonCompacto: {
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: 10,
+    borderRadius: 12,
   },
   botonTexto: {
     fontSize: 15,
@@ -200,9 +234,8 @@ const styles = StyleSheet.create({
     letterSpacing: 0.4,
   },
   input: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: UI.borde,
+    backgroundColor: UI.fondo,
+    ...bordeHundido,
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 11,
@@ -222,30 +255,45 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 9,
     borderRadius: 999,
-    borderWidth: 1,
-    borderColor: UI.borde,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: UI.fondo,
+    ...borde45,
+    ...sombraElevada,
+    shadowOpacity: 0.3,
+    elevation: 2,
   },
   opcionActiva: {
     backgroundColor: UI.primario,
-    borderColor: UI.primario,
+    ...bordeHundido,
+    shadowOpacity: 0.1,
+    elevation: 1,
   },
   opcionTexto: {
     fontSize: 14,
     fontWeight: '600',
-    color: UI.textoSuave,
+    color: UI.texto,
   },
   opcionTextoActiva: {
     color: UI.textoPrimario,
   },
   aviso: {
-    borderRadius: 10,
+    borderRadius: 12,
     padding: 12,
     marginBottom: 14,
+    ...borde45,
+    ...sombraElevada,
+    shadowOpacity: 0.3,
+    elevation: 3,
+    borderLeftWidth: 4,
+  },
+  avisoError: {
+    borderLeftColor: UI.peligro,
+  },
+  avisoInfo: {
+    borderLeftColor: UI.primario,
   },
   avisoTexto: {
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   modalFondo: {
     flex: 1,
@@ -259,8 +307,9 @@ const styles = StyleSheet.create({
     maxWidth: 560,
     maxHeight: '92%',
     backgroundColor: UI.fondo,
-    borderRadius: 20,
+    borderRadius: 24,
     overflow: 'hidden',
+    ...sombraFuerte,
   },
   modalCabecera: {
     flexDirection: 'row',
@@ -268,13 +317,14 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingVertical: 16,
-    backgroundColor: UI.tarjeta,
+    backgroundColor: UI.fondo,
     borderBottomWidth: 1,
     borderBottomColor: UI.borde,
   },
   modalTitulo: {
-    fontSize: 18,
-    fontWeight: '800',
+    fontFamily: UI.serif,
+    fontSize: 22,
+    fontWeight: '700',
     color: UI.texto,
     flexShrink: 1,
   },
@@ -294,7 +344,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10,
     padding: 16,
-    backgroundColor: UI.tarjeta,
+    backgroundColor: UI.fondo,
     borderTopWidth: 1,
     borderTopColor: UI.borde,
   },

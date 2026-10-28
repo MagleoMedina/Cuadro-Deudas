@@ -6,23 +6,71 @@ import type { Articulo } from '@/db/repo';
 import { colorDe } from '@/lib/colors';
 import { formatearFecha, hoyISO } from '@/lib/dates';
 import { formatearMonto } from '@/lib/money';
+import { borde45, sombraElevada } from '@/lib/shadows';
 
 import { Boton } from './ui';
 
-const ANCHO_TABLA = 860;
-const COL = {
-  articulo: 260,
-  monto: 140,
-  cuota: 140,
-  fecha: 130,
-  saldo: 190,
-};
+const PX_POR_CARACTER = 8.5;
+const PX_POR_TITULO = 7.5;
 
 const CABECERAS = ['Articulo', 'Monto inicial', 'Cuota', 'fecha', 'saldo pendiente restante'];
+
+interface AnchosColumnas {
+  articulo: number;
+  monto: number;
+  cuota: number;
+  fecha: number;
+  saldo: number;
+}
+
+/** Ancho estimado: máximo largo de texto de la columna (o título partido en 2 líneas). */
+function anchoPorContenido(textos: string[], titulo: string, extra: number, minimo: number): number {
+  const contenido =
+    textos.reduce((max, texto) => Math.max(max, texto.length), 0) * PX_POR_CARACTER;
+  const titular = Math.ceil(titulo.length / 2) * PX_POR_TITULO;
+  return Math.max(minimo, Math.max(contenido, titular) + extra);
+}
+
+function anchosDeColumnas(articulos: Articulo[]): AnchosColumnas {
+  const hayPagados = articulos.some((articulo) => articulo.saldoCents === 0);
+  return {
+    articulo: anchoPorContenido(
+      articulos.map((articulo) => articulo.nombre.slice(0, 24)),
+      CABECERAS[0],
+      12,
+      140
+    ),
+    monto: anchoPorContenido(
+      articulos.map((articulo) => formatearMonto(articulo.montoInicialCents)),
+      CABECERAS[1],
+      18,
+      110
+    ),
+    cuota: anchoPorContenido(
+      articulos.map((articulo) => formatearMonto(articulo.montoCuotaCents)),
+      CABECERAS[2],
+      18,
+      100
+    ),
+    fecha: anchoPorContenido(
+      articulos.map((articulo) => formatearFecha(articulo.proximaFecha)),
+      CABECERAS[3],
+      12,
+      100
+    ),
+    saldo: anchoPorContenido(
+      articulos.map((articulo) => formatearMonto(articulo.saldoCents)),
+      CABECERAS[4],
+      (hayPagados ? 80 : 20) + 14,
+      150
+    ),
+  };
+}
 
 interface TablaProps {
   articulos: Articulo[];
   onAbonar: (articulo: Articulo) => void;
+  onEditarAbonos: (articulo: Articulo) => void;
   onEditar: (articulo: Articulo) => void;
   onArchivar: (articulo: Articulo) => void;
   onEliminar: (articulo: Articulo) => void;
@@ -31,6 +79,7 @@ interface TablaProps {
 export function CompromisosTable({
   articulos,
   onAbonar,
+  onEditarAbonos,
   onEditar,
   onArchivar,
   onEliminar,
@@ -46,6 +95,8 @@ export function CompromisosTable({
     );
   }
 
+  const anchos = anchosDeColumnas(articulos);
+
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator style={styles.scroll}>
       <View style={styles.tabla}>
@@ -57,11 +108,11 @@ export function CompromisosTable({
                 styles.cabeceraTexto,
                 {
                   width: [
-                    COL.articulo,
-                    COL.monto,
-                    COL.cuota,
-                    COL.fecha,
-                    COL.saldo,
+                    anchos.articulo,
+                    anchos.monto,
+                    anchos.cuota,
+                    anchos.fecha,
+                    anchos.saldo,
                   ][indice],
                 },
               ]}>
@@ -74,7 +125,9 @@ export function CompromisosTable({
           <FilaArticulo
             key={articulo.id}
             articulo={articulo}
+            anchos={anchos}
             onAbonar={onAbonar}
+            onEditarAbonos={onEditarAbonos}
             onEditar={onEditar}
             onArchivar={onArchivar}
             onEliminar={onEliminar}
@@ -85,15 +138,55 @@ export function CompromisosTable({
   );
 }
 
+/** Cuotas con estado y saldo general corrido: montoInicial − pagado acumulado hasta esa cuota. */
+function cuotasConSaldoCorrido(articulo: Articulo) {
+  let acumulado = 0;
+  return articulo.cuotas.map((cuota) => {
+    const estado =
+      cuota.pagadoCents >= cuota.montoCents
+        ? 'Pagada'
+        : cuota.pagadoCents > 0
+          ? 'Parcial'
+          : cuota.fechaVencimiento < hoyISO()
+            ? 'Vencida'
+            : 'Pendiente';
+    const colorEstado =
+      estado === 'Pagada'
+        ? UI.exito
+        : estado === 'Vencida'
+          ? UI.peligro
+          : estado === 'Parcial'
+            ? '#B45309'
+            : UI.textoSuave;
+    acumulado += cuota.pagadoCents;
+    return {
+      cuota,
+      estado,
+      colorEstado,
+      saldoGeneral: Math.max(0, articulo.montoInicialCents - acumulado),
+    };
+  });
+}
+
 interface FilaProps {
   articulo: Articulo;
+  anchos: AnchosColumnas;
   onAbonar: (articulo: Articulo) => void;
+  onEditarAbonos: (articulo: Articulo) => void;
   onEditar: (articulo: Articulo) => void;
   onArchivar: (articulo: Articulo) => void;
   onEliminar: (articulo: Articulo) => void;
 }
 
-function FilaArticulo({ articulo, onAbonar, onEditar, onArchivar, onEliminar }: FilaProps) {
+function FilaArticulo({
+  articulo,
+  anchos,
+  onAbonar,
+  onEditarAbonos,
+  onEditar,
+  onArchivar,
+  onEliminar,
+}: FilaProps) {
   const [abierto, setAbierto] = useState(false);
   const color = colorDe(articulo.color);
   const pagado = articulo.saldoCents === 0;
@@ -111,7 +204,7 @@ function FilaArticulo({ articulo, onAbonar, onEditar, onArchivar, onEliminar }: 
             borderLeftColor: pagado ? UI.exito : color.borde,
           },
         ]}>
-        <View style={[styles.celdaArticulo, { width: COL.articulo }]}>
+        <View style={[styles.celdaArticulo, { width: anchos.articulo }]}>
           <Text style={[styles.nombre, { color: pagado ? '#064E3B' : color.texto }]} numberOfLines={2}>
             {articulo.nombre}
           </Text>
@@ -121,17 +214,17 @@ function FilaArticulo({ articulo, onAbonar, onEditar, onArchivar, onEliminar }: 
           </Text>
         </View>
 
-        <Text style={[styles.celdaTexto, { width: COL.monto }]}>
+        <Text style={[styles.celdaTexto, { width: anchos.monto }]}>
           {formatearMonto(articulo.montoInicialCents)}
         </Text>
-        <Text style={[styles.celdaTexto, { width: COL.cuota }]}>
+        <Text style={[styles.celdaTexto, { width: anchos.cuota }]}>
           {formatearMonto(articulo.montoCuotaCents)}
         </Text>
-        <Text style={[styles.celdaTexto, { width: COL.fecha }]}>
+        <Text style={[styles.celdaTexto, { width: anchos.fecha }]}>
           {formatearFecha(articulo.proximaFecha)}
         </Text>
 
-        <View style={[styles.celdaSaldo, { width: COL.saldo }]}>
+        <View style={[styles.celdaSaldo, { width: anchos.saldo }]}>
           <Text style={[styles.saldo, pagado && styles.saldoCero]}>
             {formatearMonto(articulo.saldoCents)}
           </Text>
@@ -155,44 +248,33 @@ function FilaArticulo({ articulo, onAbonar, onEditar, onArchivar, onEliminar }: 
             <Text style={[styles.detalleTh, { width: 130 }]}>Vencimiento</Text>
             <Text style={[styles.detalleTh, { width: 130 }]}>Pagado</Text>
             <Text style={[styles.detalleTh, { width: 120 }]}>Estado</Text>
+            <Text style={[styles.detalleTh, { width: 120 }]}>Saldo</Text>
           </View>
 
-          {articulo.cuotas.map((cuota) => {
-            const estado =
-              cuota.pagadoCents >= cuota.montoCents
-                ? 'Pagada'
-                : cuota.pagadoCents > 0
-                  ? 'Parcial'
-                  : cuota.fechaVencimiento < hoyISO()
-                    ? 'Vencida'
-                    : 'Pendiente';
-            const colorEstado =
-              estado === 'Pagada'
-                ? UI.exito
-                : estado === 'Vencida'
-                  ? UI.peligro
-                  : estado === 'Parcial'
-                    ? '#B45309'
-                    : UI.textoSuave;
-
-            return (
-              <View key={cuota.id} style={styles.detalleFila}>
-                <Text style={[styles.detalleTd, { width: 46 }]}>{cuota.numero}</Text>
-                <Text style={[styles.detalleTd, { width: 130 }]}>
-                  {formatearMonto(cuota.montoCents)}
-                </Text>
-                <Text style={[styles.detalleTd, { width: 130 }]}>
-                  {formatearFecha(cuota.fechaVencimiento)}
-                </Text>
-                <Text style={[styles.detalleTd, { width: 130 }]}>
-                  {formatearMonto(cuota.pagadoCents)}
-                </Text>
-                <Text style={[styles.detalleTd, { width: 120, color: colorEstado, fontWeight: '700' }]}>
-                  {estado}
-                </Text>
-              </View>
-            );
-          })}
+          {cuotasConSaldoCorrido(articulo).map((fila) => (
+            <View key={fila.cuota.id} style={styles.detalleFila}>
+              <Text style={[styles.detalleTd, { width: 46 }]}>{fila.cuota.numero}</Text>
+              <Text style={[styles.detalleTd, { width: 130 }]}>
+                {formatearMonto(fila.cuota.montoCents)}
+              </Text>
+              <Text style={[styles.detalleTd, { width: 130 }]}>
+                {formatearFecha(fila.cuota.fechaVencimiento)}
+              </Text>
+              <Text style={[styles.detalleTd, { width: 130 }]}>
+                {formatearMonto(fila.cuota.pagadoCents)}
+              </Text>
+              <Text style={[styles.detalleTd, { width: 120, color: fila.colorEstado, fontWeight: '700' }]}>
+                {fila.estado}
+              </Text>
+              <Text
+                style={[
+                  styles.detalleTd,
+                  { width: 120, fontWeight: '700', color: fila.saldoGeneral === 0 ? UI.exito : UI.texto },
+                ]}>
+                {formatearMonto(fila.saldoGeneral)}
+              </Text>
+            </View>
+          ))}
 
           <Text style={styles.detalleResumen}>
             Abonado {formatearMonto(articulo.pagadoCents)} de{' '}
@@ -204,7 +286,15 @@ function FilaArticulo({ articulo, onAbonar, onEditar, onArchivar, onEliminar }: 
             {articulo.saldoCents > 0 ? (
               <Boton compacto titulo="Abonar" onPress={() => onAbonar(articulo)} />
             ) : null}
-            <Boton compacto variante="secundario" titulo="Editar" onPress={() => onEditar(articulo)} />
+            {articulo.pagos.length > 0 ? (
+              <Boton
+                compacto
+                variante="secundario"
+                titulo="Editar abonos"
+                onPress={() => onEditarAbonos(articulo)}
+              />
+            ) : null}
+            <Boton compacto variante="secundario" titulo="Editar cuotas" onPress={() => onEditar(articulo)} />
             <Boton
               compacto
               variante="fantasma"
@@ -221,22 +311,21 @@ function FilaArticulo({ articulo, onAbonar, onEditar, onArchivar, onEliminar }: 
 
 const styles = StyleSheet.create({
   scroll: {
-    backgroundColor: UI.tarjeta,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: UI.borde,
+    backgroundColor: UI.fondo,
+    borderRadius: 18,
+    ...sombraElevada,
   },
   tabla: {
-    width: ANCHO_TABLA,
+    paddingVertical: 2,
   },
   cabecera: {
     flexDirection: 'row',
-    backgroundColor: '#111827',
+    backgroundColor: UI.sombra,
     paddingVertical: 12,
     paddingLeft: 19,
     paddingRight: 14,
-    borderTopLeftRadius: 15,
-    borderTopRightRadius: 15,
+    borderTopLeftRadius: 17,
+    borderTopRightRadius: 17,
   },
   cabeceraTexto: {
     color: '#F9FAFB',
@@ -253,7 +342,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     borderLeftWidth: 5,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(17, 24, 39, 0.08)',
+    borderBottomColor: 'rgba(163, 177, 198, 0.35)',
   },
   celdaArticulo: {
     paddingRight: 12,
@@ -304,7 +393,7 @@ const styles = StyleSheet.create({
     color: UI.textoSuave,
   },
   detalle: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: UI.fondo,
     borderLeftWidth: 5,
     paddingHorizontal: 16,
     paddingVertical: 16,
@@ -335,7 +424,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: UI.borde,
   },
   detalleTd: {
     fontSize: 13,
@@ -354,13 +443,13 @@ const styles = StyleSheet.create({
     marginTop: 14,
   },
   vacio: {
-    backgroundColor: UI.tarjeta,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: UI.borde,
+    backgroundColor: UI.fondo,
+    borderRadius: 18,
     padding: 28,
     alignItems: 'center',
     gap: 6,
+    ...borde45,
+    ...sombraElevada,
   },
   vacioTitulo: {
     fontSize: 16,

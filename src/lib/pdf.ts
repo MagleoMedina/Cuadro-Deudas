@@ -1,10 +1,12 @@
+import { File, Paths } from 'expo-file-system';
+import { writeAsStringAsync } from 'expo-file-system/legacy';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 
 import type { Articulo } from '@/db/repo';
 
 import { colorDe } from './colors';
-import { formatearFecha } from './dates';
+import { formatearFecha, hoyISO } from './dates';
 import { formatearMonto } from './money';
 
 function escapar(texto: string): string {
@@ -16,47 +18,35 @@ function escapar(texto: string): string {
 }
 
 export function construirHtml(articulos: Articulo[], generadoEn: Date = new Date()): string {
-  const totalInicial = articulos.reduce((total, a) => total + a.montoInicialCents, 0);
-  const totalPagado = articulos.reduce((total, a) => total + a.pagadoCents, 0);
-  const totalSaldo = articulos.reduce((total, a) => total + a.saldoCents, 0);
-
-  const filas = articulos
-    .map((articulo) => {
-      const color = colorDe(articulo.color);
-      return `
-        <tr style="background:${color.fondo}">
-          <td style="border-left:4px solid ${color.borde};font-weight:700">${escapar(articulo.nombre)}</td>
-          <td class="num">${formatearMonto(articulo.montoInicialCents)}</td>
-          <td class="num">${formatearMonto(articulo.montoCuotaCents)}</td>
-          <td>${formatearFecha(articulo.proximaFecha)}</td>
-          <td class="num ${articulo.saldoCents === 0 ? 'pagado' : ''}">${formatearMonto(
-            articulo.saldoCents
-          )}${articulo.saldoCents === 0 ? ' · Pagado' : ''}</td>
-        </tr>`;
-    })
-    .join('');
-
   const desgloses = articulos
     .map((articulo) => {
       const color = colorDe(articulo.color);
-      const cuotas = articulo.cuotas
-        .map((cuota) => {
-          const estado =
-            cuota.pagadoCents >= cuota.montoCents
-              ? 'Pagada'
-              : cuota.pagadoCents > 0
-                ? 'Parcial'
-                : 'Pendiente';
-          return `
+      const cuotas = (() => {
+        let acumulado = 0;
+        return articulo.cuotas
+          .map((cuota) => {
+            const pagada = cuota.pagadoCents >= cuota.montoCents;
+            const parcial = !pagada && cuota.pagadoCents > 0;
+            const estado = pagada ? 'Pagada' : parcial ? 'Parcial' : 'Pendiente';
+            const claseEstado = pagada
+              ? 'estado-pagada'
+              : parcial
+                ? 'estado-parcial'
+                : 'estado-pendiente';
+            acumulado += cuota.pagadoCents;
+            const saldoGeneral = Math.max(0, articulo.montoInicialCents - acumulado);
+            return `
             <tr>
               <td>${cuota.numero}</td>
               <td class="num">${formatearMonto(cuota.montoCents)}</td>
               <td>${formatearFecha(cuota.fechaVencimiento)}</td>
               <td class="num">${formatearMonto(cuota.pagadoCents)}</td>
-              <td>${estado}</td>
+              <td class="${claseEstado}">${estado}</td>
+              <td class="num ${saldoGeneral === 0 ? 'saldo-cero' : ''}">${formatearMonto(saldoGeneral)}</td>
             </tr>`;
-        })
-        .join('');
+          })
+          .join('');
+      })();
 
       return `
         <section class="bloque" style="border-left:6px solid ${color.borde}">
@@ -75,6 +65,7 @@ export function construirHtml(articulos: Articulo[], generadoEn: Date = new Date
                 <th>Vencimiento</th>
                 <th>Pagado</th>
                 <th>Estado</th>
+                <th>Saldo</th>
               </tr>
             </thead>
             <tbody>${cuotas}</tbody>
@@ -90,20 +81,22 @@ export function construirHtml(articulos: Articulo[], generadoEn: Date = new Date
 <style>
   @page { margin: 24px; }
   * { box-sizing: border-box; }
-  body { font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #111827; margin: 0; }
-  h1 { font-size: 24px; margin: 0 0 4px; }
-  .fecha { color: #6B7280; font-size: 12px; margin: 0 0 20px; }
-  table { width: 100%; border-collapse: collapse; font-size: 12px; }
-  th { background: #111827; color: #FFFFFF; text-align: left; padding: 8px; font-size: 10px; text-transform: uppercase; letter-spacing: .4px; }
-  td { padding: 8px; border-bottom: 1px solid #E5E7EB; vertical-align: top; }
+  body { font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #111827; margin: 0; font-size: 14px; }
+  h1 { font-size: 28px; margin: 0 0 4px; text-align: center; }
+  .fecha { color: #6B7280; font-size: 13px; margin: 0 0 20px; text-align: center; }
+  table { width: auto; border-collapse: collapse; font-size: 14px; margin: 0 auto; }
+  th { background: #111827; color: #FFFFFF; text-align: left; padding: 10px 14px; font-size: 12px; text-transform: uppercase; letter-spacing: .4px; }
+  td { padding: 10px 14px; border-bottom: 1px solid #E5E7EB; vertical-align: top; }
   .num { text-align: right; white-space: nowrap; }
-  .pagado { color: #047857; font-weight: 700; }
-  .totales { margin-top: 12px; display: flex; gap: 24px; font-size: 12px; font-weight: 700; }
+  .estado-pagada { color: #047857; font-weight: 700; white-space: nowrap; }
+  .estado-parcial { color: #EA580C; font-weight: 700; white-space: nowrap; }
+  .estado-pendiente { color: #4B5563; white-space: nowrap; }
+  .saldo-cero { color: #047857; font-weight: 700; }
   .bloque { margin-top: 22px; padding: 10px 14px; background: #FFFFFF; page-break-inside: avoid; }
-  .bloque h2 { font-size: 15px; margin: 0 0 4px; }
-  .meta { font-size: 11px; color: #4B5563; margin: 0 0 8px; }
+  .bloque h2 { font-size: 18px; margin: 0 0 4px; }
+  .meta { font-size: 12px; color: #4B5563; margin: 0 0 8px; }
   .cuotas th { background: #F3F4F6; color: #374151; }
-  .vacio { color: #6B7280; font-size: 13px; padding: 16px 0; }
+  .vacio { color: #6B7280; font-size: 13px; padding: 16px 0; text-align: center; }
 </style>
 </head>
 <body>
@@ -114,43 +107,40 @@ export function construirHtml(articulos: Articulo[], generadoEn: Date = new Date
     ).padStart(2, '0')}`
   )}</p>
 
-  ${
-    articulos.length === 0
-      ? '<p class="vacio">Sin artículos registrados.</p>'
-      : `<table>
-          <thead>
-            <tr>
-              <th>Articulo</th>
-              <th class="num">Monto inicial</th>
-              <th class="num">Cuota</th>
-              <th>fecha</th>
-              <th class="num">saldo pendiente restante</th>
-            </tr>
-          </thead>
-          <tbody>${filas}</tbody>
-        </table>
-        <div class="totales">
-          <span>Total deuda: ${formatearMonto(totalInicial)}</span>
-          <span>Total abonado: ${formatearMonto(totalPagado)}</span>
-          <span>Saldo global: ${formatearMonto(totalSaldo)}</span>
-        </div>
-        ${desgloses}`
-  }
+  ${articulos.length === 0 ? '<p class="vacio">Sin artículos registrados.</p>' : desgloses}
 </body>
 </html>`;
 }
 
 export async function exportarPdf(articulos: Articulo[]): Promise<void> {
   const html = construirHtml(articulos);
-  const { uri } = await Print.printToFileAsync({ html });
 
-  if (await Sharing.isAvailableAsync()) {
-    await Sharing.shareAsync(uri, {
-      UTI: 'com.adobe.pdf',
-      mimeType: 'application/pdf',
-      dialogTitle: 'Cuadro Compromisos Eduardo',
-    });
-  } else {
-    await Print.printAsync({ uri });
+  if (!(await Sharing.isAvailableAsync())) {
+    await Print.printAsync({ html });
+    return;
   }
+
+  // El URI que devuelve printToFileAsync no tiene permiso READ para
+  // expo-file-system ni expo-sharing en Android ("Not allowed to read
+  // file" / "Missing 'READ' permission"). Solución: pedir el PDF en
+  // base64 y escribirlo nosotros en Paths.cache con la API legacy
+  // (encoding base64). El archivo resultante sí es compartible —
+  // mismo origen que exportarRespaldo en backup.ts.
+  const { base64 } = await Print.printToFileAsync({ html, base64: true });
+  if (!base64) {
+    throw new Error('El PDF se generó vacío. Intenta de nuevo.');
+  }
+
+  const destino = new File(Paths.cache, `cuadro-compromisos-${hoyISO()}.pdf`);
+  if (destino.exists) {
+    destino.delete();
+  }
+  destino.create();
+  await writeAsStringAsync(destino.uri, base64, { encoding: 'base64' });
+
+  await Sharing.shareAsync(destino.uri, {
+    UTI: 'com.adobe.pdf',
+    mimeType: 'application/pdf',
+    dialogTitle: 'Cuadro Compromisos Eduardo',
+  });
 }
