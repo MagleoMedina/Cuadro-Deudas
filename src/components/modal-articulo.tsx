@@ -29,6 +29,10 @@ export function ModalArticulo({
   const [montoInicial, setMontoInicial] = useState(
     articulo ? montoAInput(articulo.montoInicialCents) : ''
   );
+  const inicialExistente = articulo?.pagos.find((pago) => pago.tipo === 'inicial') ?? null;
+  const [cancelacion, setCancelacion] = useState(
+    inicialExistente ? montoAInput(inicialExistente.montoCents) : ''
+  );
   const [montoCuota, setMontoCuota] = useState(
     articulo ? montoAInput(articulo.montoCuotaCents) : ''
   );
@@ -42,11 +46,14 @@ export function ModalArticulo({
 
   const montoCents = parseMontoACentos(montoInicial);
   const cuotaCents = parseMontoACentos(montoCuota);
+  const cancelacionCents = cancelacion.trim() === '' ? 0 : parseMontoACentos(cancelacion);
+  const saldoTrasCancelacion =
+    montoCents !== null && cancelacionCents !== null ? montoCents - cancelacionCents : null;
   const n = Number(numCuotas);
   const paso = Number(intervalo);
   const ultimaCuota =
-    montoCents !== null && cuotaCents !== null && Number.isInteger(n) && n >= 1
-      ? montoCents - cuotaCents * (n - 1)
+    saldoTrasCancelacion !== null && cuotaCents !== null && Number.isInteger(n) && n >= 1
+      ? saldoTrasCancelacion - cuotaCents * (n - 1)
       : null;
 
   const guardar = async () => {
@@ -57,7 +64,19 @@ export function ModalArticulo({
       return;
     }
     if (montoCents === null || montoCents <= 0) {
-      setError('El monto inicial debe ser mayor que $0.00.');
+      setError('El monto total debe ser mayor que $0.00.');
+      return;
+    }
+    if (cancelacionCents === null || cancelacionCents < 0) {
+      setError('La cancelación inicial debe ser $0.00 o más.');
+      return;
+    }
+    if (cancelacionCents > montoCents) {
+      setError('La cancelación inicial no puede superar el monto total.');
+      return;
+    }
+    if (saldoTrasCancelacion !== null && saldoTrasCancelacion <= 0) {
+      setError('La cancelación inicial debe ser menor que el monto total.');
       return;
     }
     if (cuotaCents === null || cuotaCents <= 0) {
@@ -74,7 +93,7 @@ export function ModalArticulo({
     }
     if (ultimaCuota === null || ultimaCuota <= 0) {
       setError(
-        `La cuota de ${formatearMonto(cuotaCents)} por ${n} cuotas supera el monto inicial.`
+        `La cuota de ${formatearMonto(cuotaCents)} por ${n} cuotas supera el monto financiado.`
       );
       return;
     }
@@ -91,6 +110,7 @@ export function ModalArticulo({
           intervalo: paso,
           fechaInicio,
           color,
+          cancelacionInicialCents: cancelacionCents,
         },
         articulo?.id
       );
@@ -129,11 +149,20 @@ export function ModalArticulo({
       />
 
       <Campo
-        etiqueta="Monto inicial ($)"
+        etiqueta="Monto total ($)"
         value={montoInicial}
         onChangeText={setMontoInicial}
         placeholder="0.00"
         keyboardType="decimal-pad"
+      />
+
+      <Campo
+        etiqueta="Cancelación inicial ($) — opcional"
+        value={cancelacion}
+        onChangeText={setCancelacion}
+        placeholder="0.00"
+        keyboardType="decimal-pad"
+        ayuda="Abono especial que se registra al inicio y baja el saldo pendiente."
       />
 
       <View style={styles.fila}>
@@ -200,8 +229,15 @@ export function ModalArticulo({
             Última cuota: <Text style={styles.resumenFuerte}>{formatearMonto(ultimaCuota)}</Text>
           </Text>
           <Text style={styles.resumenTexto}>
-            Total: <Text style={styles.resumenFuerte}>{formatearMonto(montoCents ?? 0)}</Text>
+            Monto total:{' '}
+            <Text style={styles.resumenFuerte}>{formatearMonto(montoCents ?? 0)}</Text>
           </Text>
+          {saldoTrasCancelacion !== null && saldoTrasCancelacion > 0 ? (
+            <Text style={styles.resumenTexto}>
+              Financiado:{' '}
+              <Text style={styles.resumenFuerte}>{formatearMonto(saldoTrasCancelacion)}</Text>
+            </Text>
+          ) : null}
           <Text style={styles.resumenTexto}>
             Última fecha:{' '}
             <Text style={styles.resumenFuerte}>

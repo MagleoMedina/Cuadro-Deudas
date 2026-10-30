@@ -2,13 +2,13 @@ import { useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { UI } from '@/constants/ui';
-import type { Articulo, NuevoPago } from '@/db/repo';
+import type { Articulo, NuevoPago, TipoPago } from '@/db/repo';
 import { formatearFecha, hoyISO } from '@/lib/dates';
 import { formatearMonto, montoAInput, parseMontoACentos } from '@/lib/money';
 import { borde45, sombraElevada } from '@/lib/shadows';
 
 import { FechaCampo } from './fecha-campo';
-import { Aviso, Boton, Campo, ModalShell } from './ui';
+import { Aviso, Boton, Campo, ModalShell, Selector } from './ui';
 
 interface ModalAbonoProps {
   visible: boolean;
@@ -19,6 +19,11 @@ interface ModalAbonoProps {
   onEditar: (pagoId: number, articleId: number, pago: NuevoPago) => Promise<void>;
   onEliminar: (pagoId: number, articleId: number) => Promise<void>;
 }
+
+const OPCIONES_TIPO: { valor: TipoPago; etiqueta: string }[] = [
+  { valor: 'abono', etiqueta: 'Abono' },
+  { valor: 'inicial', etiqueta: 'Cancelación inicial' },
+];
 
 export function ModalAbono({
   visible,
@@ -43,6 +48,7 @@ export function ModalAbono({
   const [monto, setMonto] = useState('');
   const [fecha, setFecha] = useState(hoyISO());
   const [nota, setNota] = useState('');
+  const [tipo, setTipo] = useState<TipoPago>('abono');
   const [editandoId, setEditandoId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
@@ -50,6 +56,8 @@ export function ModalAbono({
   const seleccionado = articulos.find((articulo) => articulo.id === articleId) ?? null;
   const montoCents = parseMontoACentos(monto);
   const pagoEnEdicion = seleccionado?.pagos.find((pago) => pago.id === editandoId) ?? null;
+  const yaTieneInicial =
+    seleccionado?.pagos.some((pago) => pago.tipo === 'inicial' && pago.id !== editandoId) ?? false;
   const saldoDisponible = (seleccionado?.saldoCents ?? 0) + (pagoEnEdicion?.montoCents ?? 0);
   const saldoDespues =
     montoCents === null || seleccionado === null
@@ -60,6 +68,7 @@ export function ModalAbono({
     setMonto('');
     setFecha(hoyISO());
     setNota('');
+    setTipo('abono');
     setEditandoId(null);
     setError(null);
   };
@@ -83,7 +92,12 @@ export function ModalAbono({
 
     setGuardando(true);
     try {
-      const datos: NuevoPago = { montoCents, fecha, nota: nota.trim() ? nota.trim() : null };
+      const datos: NuevoPago = {
+        montoCents,
+        fecha,
+        nota: nota.trim() ? nota.trim() : null,
+        tipo,
+      };
       if (editandoId !== null) {
         await onEditar(editandoId, seleccionado.id, datos);
       } else {
@@ -171,13 +185,25 @@ export function ModalAbono({
           {seleccionado ? (
             <View style={styles.resumen}>
               <View style={styles.resumenFila}>
-                <Text style={styles.resumenEtiqueta}>Monto inicial</Text>
+                <Text style={styles.resumenEtiqueta}>Monto total</Text>
                 <Text style={styles.resumenValor}>
                   {formatearMonto(seleccionado.montoInicialCents)}
                 </Text>
               </View>
               <View style={styles.resumenFila}>
-                <Text style={styles.resumenEtiqueta}>Abonado</Text>
+                <Text style={styles.resumenEtiqueta}>Cuota inicial</Text>
+                <Text style={styles.resumenValor}>
+                  {formatearMonto(seleccionado.cuotaInicialCents)}
+                </Text>
+              </View>
+              <View style={styles.resumenFila}>
+                <Text style={styles.resumenEtiqueta}>Financiado</Text>
+                <Text style={styles.resumenValor}>
+                  {formatearMonto(seleccionado.montoInicialCents - seleccionado.cuotaInicialCents)}
+                </Text>
+              </View>
+              <View style={styles.resumenFila}>
+                <Text style={styles.resumenEtiqueta}>Saldo pagado</Text>
                 <Text style={styles.resumenValor}>{formatearMonto(seleccionado.pagadoCents)}</Text>
               </View>
               <View style={styles.resumenFila}>
@@ -189,8 +215,19 @@ export function ModalAbono({
             </View>
           ) : null}
 
+          <Selector
+            etiqueta="Tipo de abono"
+            valor={tipo}
+            opciones={
+              yaTieneInicial
+                ? OPCIONES_TIPO.filter((opcion) => opcion.valor === 'abono')
+                : OPCIONES_TIPO
+            }
+            onChange={setTipo}
+          />
+
           <Campo
-            etiqueta="Monto del abono ($)"
+            etiqueta={tipo === 'inicial' ? 'Monto de la cancelación ($)' : 'Monto del abono ($)'}
             value={monto}
             onChangeText={setMonto}
             placeholder="0.00"
@@ -227,6 +264,9 @@ export function ModalAbono({
                     {formatearFecha(pago.fecha)}
                     {pago.nota ? ` · ${pago.nota}` : ''}
                   </Text>
+                  {pago.tipo === 'inicial' ? (
+                    <Text style={styles.pagoTipo}>Cancelación inicial</Text>
+                  ) : null}
                 </View>
                 <Boton
                   compacto
@@ -237,6 +277,7 @@ export function ModalAbono({
                     setMonto(montoAInput(pago.montoCents));
                     setFecha(pago.fecha);
                     setNota(pago.nota ?? '');
+                    setTipo(pago.tipo);
                     setError(null);
                   }}
                 />
@@ -339,6 +380,13 @@ const styles = StyleSheet.create({
   pagoDetalle: {
     fontSize: 12,
     color: UI.textoSuave,
+  },
+  pagoTipo: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: UI.exito,
+    textTransform: 'uppercase',
+    marginTop: 2,
   },
   sinPagos: {
     fontSize: 13,

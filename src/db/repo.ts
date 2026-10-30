@@ -1,7 +1,9 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 import type { Frecuencia } from '@/lib/dates';
-import { sumarPeriodo } from '@/lib/dates';
+import { hoyISO, sumarPeriodo } from '@/lib/dates';
+
+export type TipoPago = 'abono' | 'inicial';
 
 export interface Cuota {
   id: number;
@@ -16,6 +18,7 @@ export interface Pago {
   montoCents: number;
   fecha: string;
   nota: string | null;
+  tipo: TipoPago;
   createdAt: string;
 }
 
@@ -36,6 +39,9 @@ export interface Articulo {
   saldoCents: number;
   proximaFecha: string | null;
   montoCuotaCents: number;
+  cuotaInicialCents: number;
+  cuotasPagadas: number;
+  cuotasPendientes: number;
 }
 
 export interface NuevoArticulo {
@@ -47,12 +53,15 @@ export interface NuevoArticulo {
   intervalo: number;
   fechaInicio: string;
   color: string;
+  /** Abono especial opcional que se registra al crear el artículo y baja el saldo. */
+  cancelacionInicialCents?: number;
 }
 
 export interface NuevoPago {
   montoCents: number;
   fecha: string;
   nota: string | null;
+  tipo?: TipoPago;
 }
 
 interface FilaArticulo {
@@ -83,6 +92,7 @@ interface FilaPago {
   monto_cents: number;
   fecha: string;
   nota: string | null;
+  tipo: string;
   created_at: string;
 }
 
@@ -127,6 +137,7 @@ export async function listarArticulos(
       montoCents: fila.monto_cents,
       fecha: fila.fecha,
       nota: fila.nota,
+      tipo: fila.tipo === 'inicial' ? 'inicial' : 'abono',
       createdAt: fila.created_at,
     });
     pagosPorArticulo.set(fila.article_id, lista);
@@ -137,7 +148,13 @@ export async function listarArticulos(
     const pagosArticulo = pagosPorArticulo.get(fila.id) ?? [];
     const pagadoCents = pagosArticulo.reduce((total, pago) => total + pago.montoCents, 0);
     const saldoCents = Math.max(0, fila.monto_inicial_cents - pagadoCents);
+    const cuotaInicialCents = pagosArticulo
+      .filter((pago) => pago.tipo === 'inicial')
+      .reduce((total, pago) => total + pago.montoCents, 0);
     const pendiente = cuotasArticulo.find((cuota) => cuota.pagadoCents < cuota.montoCents);
+    const cuotasPagadas = cuotasArticulo.filter(
+      (cuota) => cuota.pagadoCents >= cuota.montoCents
+    ).length;
 
     return {
       id: fila.id,
@@ -156,13 +173,18 @@ export async function listarArticulos(
       saldoCents,
       proximaFecha: saldoCents === 0 ? null : (pendiente?.fechaVencimiento ?? null),
       montoCuotaCents: cuotasArticulo[0]?.montoCents ?? 0,
+      cuotaInicialCents,
+      cuotasPagadas,
+      cuotasPendientes: cuotasArticulo.length - cuotasPagadas,
     };
   });
 }
 
 export function calcularCuotas(articulo: NuevoArticulo): { montoCents: number; fecha: string }[] {
   const cuotas: { montoCents: number; fecha: string }[] = [];
-  const resto = articulo.montoInicialCents - articulo.montoCuotaCents * (articulo.numCuotas - 1);
+  const financiado =
+    articulo.montoInicialCents - Math.max(0, articulo.cancelacionInicialCents ?? 0);
+  const resto = financiado - articulo.montoCuotaCents * (articulo.numCuotas - 1);
   for (let indice = 0; indice < articulo.numCuotas; indice += 1) {
     cuotas.push({
       montoCents: indice === articulo.numCuotas - 1 ? resto : articulo.montoCuotaCents,
@@ -178,7 +200,7 @@ export async function crearArticulo(
 ): Promise<number> {
   const cuotas = calcularCuotas(articulo);
   if (cuotas.some((cuota) => cuota.montoCents <= 0)) {
-    throw new Error('La cuota y el número de cuotas no cubren el monto inicial.');
+    throw new Error('La cuota y el número de cuotas no cubren el monto financiado.');
   }
 
   let nuevoId = 0;
@@ -210,9 +232,52 @@ export async function crearArticulo(
         cuotas[indice].fecha
       );
     }
+
+    const cancelacion = Math.min(
+      articulo.montoInicialCents,
+      Math.max(0, articulo.cancelacionInicialCents ?? 0)
+    );
+    if (cancelacion > 0) {
+      await sincronizarCancelacion(db, nuevoId, cancelacion);
+      await reasignar(db, nuevoId);
+    }
   });
 
   return nuevoId;
+}
+
+async function sincronizarCancelacion(
+  db: SQLiteDatabase,
+  articleId: number,
+  montoCents: number
+): Promise<void> {
+  const existente = await db.getFirstAsync<{ id: number; monto_cents: number }>(
+    "SELECT id, monto_cents FROM payments WHERE article_id = ? AND tipo = 'inicial' ORDER BY id LIMIT 1",
+    articleId
+  );
+
+  if (!existente) {
+    if (montoCents > 0) {
+      await db.runAsync(
+        `INSERT INTO payments (article_id, monto_cents, fecha, nota, tipo, created_at)
+         VALUES (?, ?, ?, 'Cancelación inicial', 'inicial', ?)`,
+        articleId,
+        montoCents,
+        hoyISO(),
+        new Date().toISOString()
+      );
+    }
+    return;
+  }
+
+  if (montoCents <= 0) {
+    await db.runAsync('DELETE FROM payments WHERE id = ?', existente.id);
+    return;
+  }
+
+  if (existente.monto_cents !== montoCents) {
+    await db.runAsync('UPDATE payments SET monto_cents = ? WHERE id = ?', montoCents, existente.id);
+  }
 }
 
 export async function editarArticulo(
@@ -222,7 +287,7 @@ export async function editarArticulo(
 ): Promise<void> {
   const cuotas = calcularCuotas(articulo);
   if (cuotas.some((cuota) => cuota.montoCents <= 0)) {
-    throw new Error('La cuota y el número de cuotas no cubren el monto inicial.');
+    throw new Error('La cuota y el número de cuotas no cubren el monto financiado.');
   }
 
   await db.withTransactionAsync(async () => {
@@ -255,6 +320,12 @@ export async function editarArticulo(
       );
     }
 
+    const cancelacion = Math.min(
+      articulo.montoInicialCents,
+      Math.max(0, articulo.cancelacionInicialCents ?? 0)
+    );
+    await sincronizarCancelacion(db, id, cancelacion);
+
     await reasignar(db, id);
   });
 }
@@ -278,11 +349,13 @@ export async function crearPago(
 ): Promise<void> {
   await db.withTransactionAsync(async () => {
     await db.runAsync(
-      'INSERT INTO payments (article_id, monto_cents, fecha, nota, created_at) VALUES (?, ?, ?, ?, ?)',
+      `INSERT INTO payments (article_id, monto_cents, fecha, nota, tipo, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
       articleId,
       pago.montoCents,
       pago.fecha,
       pago.nota?.trim() ? pago.nota.trim() : null,
+      pago.tipo ?? 'abono',
       new Date().toISOString()
     );
     await reasignar(db, articleId);
@@ -297,10 +370,11 @@ export async function editarPago(
 ): Promise<void> {
   await db.withTransactionAsync(async () => {
     await db.runAsync(
-      'UPDATE payments SET monto_cents = ?, fecha = ?, nota = ? WHERE id = ?',
+      'UPDATE payments SET monto_cents = ?, fecha = ?, nota = ?, tipo = ? WHERE id = ?',
       pago.montoCents,
       pago.fecha,
       pago.nota?.trim() ? pago.nota.trim() : null,
+      pago.tipo ?? 'abono',
       pagoId
     );
     await reasignar(db, articleId);
@@ -331,7 +405,9 @@ async function reasignar(db: SQLiteDatabase, articleId: number): Promise<void> {
     articleId
   );
   const pagos = await db.getAllAsync<{ id: number; monto_cents: number }>(
-    'SELECT id, monto_cents FROM payments WHERE article_id = ? ORDER BY fecha ASC, id ASC',
+    `SELECT id, monto_cents FROM payments
+     WHERE article_id = ? AND tipo <> 'inicial'
+     ORDER BY fecha ASC, id ASC`,
     articleId
   );
 

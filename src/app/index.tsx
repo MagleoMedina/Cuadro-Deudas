@@ -21,7 +21,7 @@ import type { Articulo, NuevoArticulo, NuevoPago } from '@/db/repo';
 import { useCompromisos } from '@/hooks/use-compromisos';
 import { exportarRespaldo, importarRespaldo } from '@/lib/backup';
 import { colorPorIndice } from '@/lib/colors';
-import { exportarPdf } from '@/lib/pdf';
+import { exportarPdf, exportarPdfResumen } from '@/lib/pdf';
 import { borde45, bordeHundido, sombraElevada } from '@/lib/shadows';
 
 export default function HomeScreen() {
@@ -49,6 +49,11 @@ export default function HomeScreen() {
   const [modalAbono, setModalAbono] = useState(false);
   const [articuloAbonar, setArticuloAbonar] = useState<Articulo | null>(null);
   const [ocupado, setOcupado] = useState(false);
+  const [escala, setEscala] = useState(1);
+
+  const cambiarEscala = (delta: number) => {
+    setEscala((valor) => Math.min(1.6, Math.max(0.6, Math.round((valor + delta) * 10) / 10)));
+  };
 
   const abrirNuevo = () => {
     setArticuloEditando(null);
@@ -114,6 +119,17 @@ export default function HomeScreen() {
     setOcupado(true);
     try {
       await exportarPdf(articulos);
+    } catch (e) {
+      Alert.alert('No se pudo exportar', e instanceof Error ? e.message : 'Intenta de nuevo.');
+    } finally {
+      setOcupado(false);
+    }
+  };
+
+  const exportarResumen = async () => {
+    setOcupado(true);
+    try {
+      await exportarPdfResumen(articulos);
     } catch (e) {
       Alert.alert('No se pudo exportar', e instanceof Error ? e.message : 'Intenta de nuevo.');
     } finally {
@@ -191,20 +207,53 @@ export default function HomeScreen() {
               <Text style={styles.cargandoTexto}>Cargando compromisos…</Text>
             </View>
           ) : (
-            <CompromisosTable
-              articulos={articulos}
-              onAbonar={abrirAbonar}
-              onEditarAbonos={abrirAbonar}
-              onEditar={abrirEditar}
-              onArchivar={confirmarArchivar}
-              onEliminar={confirmarEliminar}
-            />
+            <>
+              {articulos.length > 0 ? (
+                <View style={styles.zoomBarra}>
+                  <Text style={styles.zoomEtiqueta}>Zoom de la tabla</Text>
+                  <View style={styles.zoomControles}>
+                    <Boton
+                      compacto
+                      variante="fantasma"
+                      titulo="−"
+                      onPress={() => cambiarEscala(-0.1)}
+                      disabled={escala <= 0.6}
+                    />
+                    <Text style={styles.zoomValor}>{Math.round(escala * 100)}%</Text>
+                    <Boton
+                      compacto
+                      variante="fantasma"
+                      titulo="+"
+                      onPress={() => cambiarEscala(0.1)}
+                      disabled={escala >= 1.6}
+                    />
+                    <Boton
+                      compacto
+                      variante="fantasma"
+                      titulo="Ajustar"
+                      onPress={() => setEscala(1)}
+                      disabled={escala === 1}
+                    />
+                  </View>
+                </View>
+              ) : null}
+              <CompromisosTable
+                articulos={articulos}
+                escala={escala}
+                onAbonar={abrirAbonar}
+                onEditarAbonos={abrirAbonar}
+                onEditar={abrirEditar}
+                onArchivar={confirmarArchivar}
+                onEliminar={confirmarEliminar}
+              />
+            </>
           )}
         </ScrollView>
 
         <View style={styles.piePagina}>
           <View style={styles.herramientas}>
-            <Boton compacto titulo="Exportar PDF" onPress={exportar} disabled={ocupado} />
+            <Boton compacto titulo="PDF completo" onPress={exportar} disabled={ocupado} />
+            <Boton compacto titulo="PDF resumen" onPress={exportarResumen} disabled={ocupado} />
             <Boton compacto variante="secundario" titulo="Respaldar" onPress={exportarJson} disabled={ocupado} />
             <Boton compacto variante="secundario" titulo="Importar" onPress={importarJson} disabled={ocupado} />
             <Pressable
@@ -370,6 +419,33 @@ const styles = StyleSheet.create({
   scrollContenido: {
     paddingBottom: 16,
     gap: 12,
+  },
+  zoomBarra: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: 8,
+    paddingHorizontal: 2,
+  },
+  zoomEtiqueta: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: UI.textoSuave,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  zoomControles: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  zoomValor: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: UI.texto,
+    minWidth: 46,
+    textAlign: 'center',
   },
   cargando: {
     paddingVertical: 48,

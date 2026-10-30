@@ -33,6 +33,7 @@ interface FilaPago {
   monto_cents: number;
   fecha: string;
   nota: string | null;
+  tipo?: string;
   created_at: string;
 }
 
@@ -152,13 +153,14 @@ export async function importarRespaldo(db: SQLiteDatabase): Promise<number> {
 
     for (const fila of datos.payments as FilaPago[]) {
       await db.runAsync(
-        `INSERT INTO payments (id, article_id, monto_cents, fecha, nota, created_at)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO payments (id, article_id, monto_cents, fecha, nota, tipo, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
         fila.id,
         fila.article_id,
         fila.monto_cents,
         fila.fecha,
         fila.nota,
+        fila.tipo === 'inicial' ? 'inicial' : 'abono',
         fila.created_at
       );
     }

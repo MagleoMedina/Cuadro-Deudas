@@ -13,15 +13,42 @@ import { Boton } from './ui';
 const PX_POR_CARACTER = 8.5;
 const PX_POR_TITULO = 7.5;
 
-const CABECERAS = ['Articulo', 'Monto inicial', 'Cuota', 'fecha', 'saldo pendiente restante'];
+const CABECERAS = [
+  'Articulo',
+  'Monto Total',
+  'cuota Inicial',
+  'Cuota',
+  'fecha',
+  'cuotas pagadas',
+  'cuotas pendientes',
+  'Saldo Pagado hasta el día',
+  'saldo pendiente restante',
+];
 
 interface AnchosColumnas {
   articulo: number;
   monto: number;
+  inicial: number;
   cuota: number;
   fecha: number;
+  pagadas: number;
+  pendientes: number;
+  saldoPagado: number;
   saldo: number;
 }
+
+/** Color de cada cabecera, en el mismo orden que CABECERAS. */
+const COLORES_CABECERA: { fondo: string; texto: string }[] = [
+  { fondo: '#2D3748', texto: '#F9FAFB' }, // Articulo
+  { fondo: '#1D4ED8', texto: '#FFFFFF' }, // Monto Total
+  { fondo: '#15803D', texto: '#FFFFFF' }, // cuota Inicial
+  { fondo: '#FACC15', texto: '#1F2937' }, // Cuota
+  { fondo: '#2D3748', texto: '#F9FAFB' }, // fecha
+  { fondo: '#15803D', texto: '#FFFFFF' }, // cuotas pagadas
+  { fondo: '#B91C1C', texto: '#FFFFFF' }, // cuotas pendientes
+  { fondo: '#111827', texto: '#FFFFFF' }, // Saldo Pagado hasta el día
+  { fondo: '#B91C1C', texto: '#FFFFFF' }, // saldo pendiente restante
+];
 
 /** Ancho estimado: máximo largo de texto de la columna (o título partido en 2 líneas). */
 function anchoPorContenido(textos: string[], titulo: string, extra: number, minimo: number): number {
@@ -44,31 +71,56 @@ function anchosDeColumnas(articulos: Articulo[]): AnchosColumnas {
       articulos.map((articulo) => formatearMonto(articulo.montoInicialCents)),
       CABECERAS[1],
       18,
-      110
+      125
+    ),
+    inicial: anchoPorContenido(
+      articulos.map((articulo) => formatearMonto(articulo.cuotaInicialCents)),
+      CABECERAS[2],
+      18,
+      135
     ),
     cuota: anchoPorContenido(
       articulos.map((articulo) => formatearMonto(articulo.montoCuotaCents)),
-      CABECERAS[2],
+      CABECERAS[3],
       18,
       100
     ),
     fecha: anchoPorContenido(
       articulos.map((articulo) => formatearFecha(articulo.proximaFecha)),
-      CABECERAS[3],
+      CABECERAS[4],
       12,
       100
     ),
+    pagadas: anchoPorContenido(
+      articulos.map((articulo) => String(articulo.cuotasPagadas)),
+      CABECERAS[5],
+      30,
+      110
+    ),
+    pendientes: anchoPorContenido(
+      articulos.map((articulo) => String(articulo.cuotasPendientes)),
+      CABECERAS[6],
+      30,
+      120
+    ),
+    saldoPagado: anchoPorContenido(
+      articulos.map((articulo) => formatearMonto(articulo.pagadoCents)),
+      CABECERAS[7],
+      24,
+      170
+    ),
     saldo: anchoPorContenido(
       articulos.map((articulo) => formatearMonto(articulo.saldoCents)),
-      CABECERAS[4],
-      (hayPagados ? 80 : 20) + 14,
-      150
+      CABECERAS[8],
+      (hayPagados ? 80 : 20) + 34,
+      215
     ),
   };
 }
 
 interface TablaProps {
   articulos: Articulo[];
+  escala: number;
   onAbonar: (articulo: Articulo) => void;
   onEditarAbonos: (articulo: Articulo) => void;
   onEditar: (articulo: Articulo) => void;
@@ -78,12 +130,15 @@ interface TablaProps {
 
 export function CompromisosTable({
   articulos,
+  escala,
   onAbonar,
   onEditarAbonos,
   onEditar,
   onArchivar,
   onEliminar,
 }: TablaProps) {
+  const [altura, setAltura] = useState(0);
+
   if (articulos.length === 0) {
     return (
       <View style={styles.vacio}>
@@ -96,51 +151,88 @@ export function CompromisosTable({
   }
 
   const anchos = anchosDeColumnas(articulos);
+  const anchoTotal =
+    anchos.articulo +
+    anchos.monto +
+    anchos.inicial +
+    anchos.cuota +
+    anchos.fecha +
+    anchos.pagadas +
+    anchos.pendientes +
+    anchos.saldoPagado +
+    anchos.saldo +
+    33; // padding izquierdo + derecho de cabecera y filas
 
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator style={styles.scroll}>
-      <View style={styles.tabla}>
-        <View style={styles.cabecera}>
-          {CABECERAS.map((titulo, indice) => (
-            <Text
-              key={titulo}
-              style={[
-                styles.cabeceraTexto,
-                {
-                  width: [
-                    anchos.articulo,
-                    anchos.monto,
-                    anchos.cuota,
-                    anchos.fecha,
-                    anchos.saldo,
-                  ][indice],
-                },
-              ]}>
-              {titulo}
-            </Text>
-          ))}
-        </View>
+      <View
+        style={{
+          width: anchoTotal * escala,
+          height: altura > 0 ? altura * escala : undefined,
+        }}>
+        <View
+          onLayout={(evento) => setAltura(evento.nativeEvent.layout.height)}
+          style={{
+            width: anchoTotal,
+            transform: [{ scale: escala }],
+            transformOrigin: 'top left',
+          }}>
+          <View style={styles.tabla}>
+            <View style={styles.cabecera}>
+              {CABECERAS.map((titulo, indice) => (
+                <View
+                  key={titulo}
+                  style={[
+                    styles.cabeceraCelda,
+                    {
+                      width: [
+                        anchos.articulo,
+                        anchos.monto,
+                        anchos.inicial,
+                        anchos.cuota,
+                        anchos.fecha,
+                        anchos.pagadas,
+                        anchos.pendientes,
+                        anchos.saldoPagado,
+                        anchos.saldo,
+                      ][indice],
+                      backgroundColor: COLORES_CABECERA[indice].fondo,
+                    },
+                  ]}>
+                  <Text
+                    style={[
+                      styles.cabeceraTexto,
+                      { color: COLORES_CABECERA[indice].texto },
+                    ]}>
+                    {titulo}
+                  </Text>
+                </View>
+              ))}
+            </View>
 
-        {articulos.map((articulo) => (
-          <FilaArticulo
-            key={articulo.id}
-            articulo={articulo}
-            anchos={anchos}
-            onAbonar={onAbonar}
-            onEditarAbonos={onEditarAbonos}
-            onEditar={onEditar}
-            onArchivar={onArchivar}
-            onEliminar={onEliminar}
-          />
-        ))}
+            {articulos.map((articulo) => (
+              <FilaArticulo
+                key={articulo.id}
+                articulo={articulo}
+                anchos={anchos}
+                onAbonar={onAbonar}
+                onEditarAbonos={onEditarAbonos}
+                onEditar={onEditar}
+                onArchivar={onArchivar}
+                onEliminar={onEliminar}
+              />
+            ))}
+          </View>
+        </View>
       </View>
     </ScrollView>
   );
 }
 
-/** Cuotas con estado y saldo general corrido: montoInicial − pagado acumulado hasta esa cuota. */
+/** Cuotas con estado y saldo corrido: financiado − pagado acumulado hasta esa cuota. */
 function cuotasConSaldoCorrido(articulo: Articulo) {
   let acumulado = 0;
+  const financiado = Math.max(0, articulo.montoInicialCents - articulo.cuotaInicialCents);
   return articulo.cuotas.map((cuota) => {
     const estado =
       cuota.pagadoCents >= cuota.montoCents
@@ -163,9 +255,26 @@ function cuotasConSaldoCorrido(articulo: Articulo) {
       cuota,
       estado,
       colorEstado,
-      saldoGeneral: Math.max(0, articulo.montoInicialCents - acumulado),
+      saldoGeneral: Math.max(0, financiado - acumulado),
     };
   });
+}
+
+function Dato({
+  etiqueta,
+  valor,
+  destacado = false,
+}: {
+  etiqueta: string;
+  valor: string;
+  destacado?: boolean;
+}) {
+  return (
+    <View style={styles.dato}>
+      <Text style={styles.datoEtiqueta}>{etiqueta}</Text>
+      <Text style={[styles.datoValor, destacado && styles.datoValorCero]}>{valor}</Text>
+    </View>
+  );
 }
 
 interface FilaProps {
@@ -217,11 +326,23 @@ function FilaArticulo({
         <Text style={[styles.celdaTexto, { width: anchos.monto }]}>
           {formatearMonto(articulo.montoInicialCents)}
         </Text>
+        <Text style={[styles.celdaTexto, { width: anchos.inicial }]}>
+          {formatearMonto(articulo.cuotaInicialCents)}
+        </Text>
         <Text style={[styles.celdaTexto, { width: anchos.cuota }]}>
           {formatearMonto(articulo.montoCuotaCents)}
         </Text>
         <Text style={[styles.celdaTexto, { width: anchos.fecha }]}>
           {formatearFecha(articulo.proximaFecha)}
+        </Text>
+        <Text style={[styles.celdaTexto, { width: anchos.pagadas }]}>
+          {articulo.cuotasPagadas}
+        </Text>
+        <Text style={[styles.celdaTexto, { width: anchos.pendientes }]}>
+          {articulo.cuotasPendientes}
+        </Text>
+        <Text style={[styles.celdaTexto, { width: anchos.saldoPagado }]}>
+          {formatearMonto(articulo.pagadoCents)}
         </Text>
 
         <View style={[styles.celdaSaldo, { width: anchos.saldo }]}>
@@ -241,6 +362,23 @@ function FilaArticulo({
       {abierto ? (
         <View style={[styles.detalle, { borderLeftColor: pagado ? UI.exito : color.borde }]}>
           <Text style={styles.detalleTitulo}>Desglose de cuotas</Text>
+
+          <View style={styles.detalleDatos}>
+            <Dato etiqueta="Monto total" valor={formatearMonto(articulo.montoInicialCents)} />
+            <Dato
+              etiqueta="Cuota inicial"
+              valor={formatearMonto(articulo.cuotaInicialCents)}
+            />
+            <Dato etiqueta="Cuota" valor={formatearMonto(articulo.montoCuotaCents)} />
+            <Dato etiqueta="Cuotas pagadas" valor={String(articulo.cuotasPagadas)} />
+            <Dato etiqueta="Cuotas pendientes" valor={String(articulo.cuotasPendientes)} />
+            <Dato etiqueta="Saldo pagado" valor={formatearMonto(articulo.pagadoCents)} />
+            <Dato
+              etiqueta="Saldo pendiente"
+              valor={formatearMonto(articulo.saldoCents)}
+              destacado={articulo.saldoCents === 0}
+            />
+          </View>
 
           <View style={styles.detalleCabecera}>
             <Text style={[styles.detalleTh, { width: 46 }]}>#</Text>
@@ -277,8 +415,7 @@ function FilaArticulo({
           ))}
 
           <Text style={styles.detalleResumen}>
-            Abonado {formatearMonto(articulo.pagadoCents)} de{' '}
-            {formatearMonto(articulo.montoInicialCents)} · {articulo.pagos.length} abono
+            {articulo.pagos.length} abono{articulo.pagos.length === 1 ? '' : 's'} registrado
             {articulo.pagos.length === 1 ? '' : 's'}
           </Text>
 
@@ -321,19 +458,23 @@ const styles = StyleSheet.create({
   cabecera: {
     flexDirection: 'row',
     backgroundColor: UI.sombra,
-    paddingVertical: 12,
     paddingLeft: 19,
     paddingRight: 14,
     borderTopLeftRadius: 17,
     borderTopRightRadius: 17,
+    overflow: 'hidden',
+  },
+  cabeceraCelda: {
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+    justifyContent: 'center',
   },
   cabeceraTexto: {
-    color: '#F9FAFB',
     fontSize: 12,
     fontWeight: '800',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-    paddingRight: 8,
+    textAlign: 'center',
   },
   fila: {
     flexDirection: 'row',
@@ -381,6 +522,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 3,
+    flexShrink: 0,
   },
   badgeTexto: {
     color: '#FFFFFF',
@@ -407,6 +549,31 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.6,
     marginBottom: 10,
+  },
+  detalleDatos: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 18,
+    marginBottom: 16,
+  },
+  dato: {
+    minWidth: 110,
+  },
+  datoEtiqueta: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: UI.textoSuave,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  datoValor: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: UI.texto,
+    marginTop: 2,
+  },
+  datoValorCero: {
+    color: UI.exito,
   },
   detalleCabecera: {
     flexDirection: 'row',
